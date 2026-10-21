@@ -1,0 +1,14 @@
+Music Hub integration, 2026-10-21.
+
+Includes source from guohuiyuan/go-music-dl:
+https://github.com/guohuiyuan/go-music-dl
+Original license: GNU Affero General Public License version 3.
+Original notices and LICENSE are preserved in vendor/go-music-dl.
+
+The engine snapshot was imported from the user's existing deployment, which already
+contained local download deduplication and write-guard changes. No upstream commit
+identity is asserted for that snapshot.
+
+Music Hub changes: Python task scheduling and UI, category rotation and editing,
+a single authenticated gateway, Compose packaging, internal service token support,
+navigation links, migration tools, documentation and tests.

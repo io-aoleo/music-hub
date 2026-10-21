@@ -1,0 +1,154 @@
+<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width,initial-scale=1">
+<title>飞牛音乐批量下载</title><style>
+*{box-sizing:border-box}body{font-family:system-ui,Arial;background:#0f1320;color:#e8ecf8;margin:0;padding:18px}
+h2{margin:0 0 6px}.sub{font-size:13px;color:#6b7a99;margin-bottom:10px}
+.cats{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+label{background:#1b2338;padding:7px 11px;border-radius:8px;cursor:pointer;border:1px solid #2b3a5c;user-select:none;font-size:14px}
+label.on{background:#2b6cff;border-color:#2b6cff;color:#fff}
+.row{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:8px 0}
+.num,.sel,input[type=time]{background:#1b2338;color:#fff;border:1px solid #2b3a5c;padding:6px;border-radius:6px}.num{width:70px}
+button{background:#2b6cff;color:#fff;border:0;padding:9px 14px;border-radius:8px;cursor:pointer;font-size:14px}
+button.stop{background:#ff5252}button.g{background:#2e7d32}
+.grid{display:grid;grid-template-columns:1.1fr .9fr;gap:14px;margin-top:12px}@media(max-width:820px){.grid{grid-template-columns:1fr}}
+.stat{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:8px 0}
+.card{background:#151b2b;border:1px solid #26324d;border-radius:8px;padding:8px;text-align:center}.card b{font-size:18px;display:block}
+.cur{color:#9fb3d8;min-height:1.2em;font-size:13px}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{padding:6px 8px;border-bottom:1px solid #1e2b45;text-align:left}th{color:#8fa6c8}
+tr.sel{background:#16233f}tr{cursor:pointer}.badge{padding:1px 6px;border-radius:6px;font-size:12px}
+.b-run{background:#2b6cff}.b-done{background:#2e7d32}.b-err,.b-stop{background:#a14}.b-no{background:#665a1a}.b-int{background:#555}.b-q{background:#345}
+#log{background:#080b14;border:1px solid #223049;border-radius:8px;height:360px;overflow:auto;padding:9px;font:12.5px/1.5 ui-monospace,Consolas,monospace;white-space:pre-wrap}
+.ok{color:#5be07f}.bad{color:#ff6b6b}.sk{color:#ffb45b}.warn{color:#ffd479}.info{color:#8fb3ff}
+.panel-t{font-size:13px;color:#9fb3d8;margin-bottom:6px}
+.sched{background:#10182a;border:1px solid #26324d;border-radius:10px;padding:12px;margin:10px 0}
+.detail{background:#151b2b;border:1px solid #2b3a5c;border-radius:12px;padding:16px;margin-top:14px}
+.detail-head{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}.details{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:16px 0}.details small{display:block;color:#8fa6c8;margin-bottom:5px}.details div{overflow-wrap:anywhere}.progress{height:8px;background:#26324d;border-radius:8px;overflow:hidden;margin:10px 0}.progress>div{height:100%;background:#5be07f;max-width:100%;transition:width .5s}.song{background:#10182a;padding:10px;border-radius:8px;margin:7px 0;overflow-wrap:anywhere}.song small{color:#8fa6c8}#connection{color:#ffb45b;font-size:13px}button.secondary{background:#263a5c}.error{color:#ff6b6b}@media(max-width:650px){.details{grid-template-columns:repeat(2,minmax(0,1fr))}}
+</style>
+<h2>🎵 飞牛音乐批量下载</h2><div class=sub>网易云选单 → music-dl 下载 · 后台运行（关网页继续）· 定时配额 · 支持 Live/现场，排除 DJ/混音</div>
+<nav class=row><a href="/" style="color:#8fb3ff">任务中心</a><a href="/music/" style="color:#8fb3ff">音乐搜索 / 播放 / 设置</a></nav><div id=editHint class=sub></div><div>勾选音乐类型（按点击顺序轮换）：</div><div class=cats id=cats></div>
+<div class=row>每类歌单 <input id=per class=num type=number value=6> 并发 <input id=w class=num type=number value=2>
+手动目标 <input id=manualTarget class=num type=number min=0 value=0> 首（0 不限）<button onclick=start()>▶ 立即开始</button><button class=stop onclick=stop()>■ 停止</button></div>
+<div class=sched><b>⏰ 定时任务 · 北京时间</b> <label style="background:none;border:0;padding:0 0 0 6px"><input type=checkbox id=en> 启用</label>
+ <div class=row>频率 <select id=freq class=sel onchange=freqChg()><option value=daily>每日</option><option value=weekly>每周</option><option value=monthly>每月</option></select>
+  <span id=wdWrap style="display:none">周几 <select id=wd class=sel><option value=0>一</option><option value=1>二</option><option value=2>三</option><option value=3>四</option><option value=4>五</option><option value=5>六</option><option value=6>日</option></select></span>
+  <span id=dyWrap style="display:none">每月 <input id=dy class=num type=number min=1 max=28 value=1> 号</span>
+  时间 <input id=tm type=time value="03:00"> 目标 <input id=tgt class=num type=number value=200> 首
+  <button class=g onclick=saveSched()>保存修改</button><button class=secondary onclick=loadSched()>载入已保存计划</button></div>
+ <div class=row>多类型执行 <select id=rotationMode class=sel onchange=renderRotation()><option value=rotate>每次一种，依次轮换</option><option value=all>每次执行全部类型</option></select>
+<label style="background:none;border:0"><input id=resetRotation type=checkbox>保存时从第一种重新轮换</label></div>
+<div id=rotationOrder class=sub></div><div id=nxt class=sub></div><div id=schedulePreview class=sub></div>
+<div class=sub>计划使用上方的类型、每类歌单和并发；每日计划即每天换一种。手动运行不会推进轮换。</div></div>
+<section class=detail>
+<div class=detail-head><b>任务运行详情 <span id=detailTitle></span></b><div class=row><button class=secondary onclick=copyJob()>载入参数修改</button><button class=secondary onclick=followLatest()>查看最新任务</button></div></div>
+<div id=connection role=status aria-live=polite></div>
+<div id=runtimeEdit class=row style="display:none">下载目标 <input id=runtimeTarget class=num type=number min=0> 首（0 不限）<button onclick=saveRunningTarget()>更新本次目标</button></div>
+<div id=detailBody><p class=sub>选择历史任务查看详情</p></div>
+</section>
+<div class=stat><div class=card><b id=saved>0</b>已下载</div><div class=card><b id=skip>0</b>跳过</div><div class=card><b id=fail>0</b>失败</div><div class=card><b id=att>0</b>尝试处理</div></div>
+<div class=cur id=cur>空闲</div>
+<div class=grid><div><div class=panel-t>历史任务（点击查看详情与日志）</div><div style="max-height:360px;overflow:auto"><table><thead><tr><th>时间</th><th>类型</th><th>状态</th><th>新/跳/败</th></tr></thead><tbody id=jobs></tbody></table></div></div>
+<div><div class=panel-t>运行日志 <span id=lgtitle style="color:#6b7a99"></span></div><div id=log>—</div></div></div>
+<script>
+const CATS=["华语经典","欧美","日语","韩语KPOP","粤语","古风","民谣","R&B","说唱","电子","动漫OST","影视金曲","摇滚","爵士","轻音乐钢琴","怀旧金曲","流行","情歌"];
+const box=document.getElementById("cats");
+let selectedCats=[];
+CATS.forEach(k=>{let l=document.createElement("label");l.textContent=k;l.dataset.k=k;l.onclick=()=>{
+ selectedCats=selectedCats.includes(k)?selectedCats.filter(x=>x!==k):[...selectedCats,k];
+ selectCats(selectedCats);
+};box.appendChild(l)});
+function sel(){return [...selectedCats]}
+function selectCats(cats){selectedCats=[...new Set(cats)].filter(c=>CATS.includes(c));box.querySelectorAll("label").forEach(l=>l.classList.toggle("on",selectedCats.includes(l.dataset.k)));renderRotation()}
+function renderRotation(){document.getElementById("rotationOrder").textContent="当前选择顺序："+(selectedCats.join(" → ")||"尚未选择")+"（重新勾选可调整顺序）"}
+function esc(s){return String(s??"").replace(/[&<>]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]))}
+let selJob=null,JOBS=[],currentDetail=null,runtimeJob=null;
+function badge(s){const m={running:["执行中","b-run"],done:["完成","b-done"],error:["错误","b-err"],stopped:["已停止","b-stop"],noresult:["无歌单","b-no"],interrupted:["中断","b-int"],queued:["排队","b-q"]};let a=m[s]||[s,"b-q"];return "<span class='badge "+a[1]+"'>"+a[0]+"</span>"}
+function J(p){return fetch(p).then(r=>r.json()).catch(()=>null)}
+async function loadJobs(){let d=await J("/api/jobs");if(!d)return;JOBS=d.jobs||[];document.getElementById("jobs").innerHTML=JOBS.map(j=>"<tr class='"+(String(j.id)===String(selJob)?"sel":"")+"' onclick='pick("+j.id+")'><td>"+esc((j.started||"").slice(5,16))+"</td><td>"+esc((j.cats||[]).join("/").slice(0,10))+(j.target?"<br><span style=color:#6b7a99>目标"+j.target+"</span>":"")+"</td><td>"+badge(j.status)+"</td><td>"+j.saved+"/"+j.skip+"/"+j.fail+"</td></tr>").join("")||"<tr><td colspan=4>暂无任务</td></tr>";}
+async function loadLog(id){let d=await J("/api/log"+(id?("?job="+id):""));if(!d||String(id)!==String(selJob))return;let el=document.getElementById("log");let stick=el.scrollTop+el.clientHeight>=el.scrollHeight-6;
+ el.innerHTML=(d.lines||[]).map(x=>{let c="info";if(x.indexOf("[OK]")>=0)c="ok";else if(x.indexOf("[FAIL]")>=0||x.indexOf("[FAIL?]")>=0)c="bad";else if(x.indexOf("[SKIP]")>=0)c="sk";else if(x.indexOf("[WARN]")>=0)c="warn";return "<div class="+c+">"+esc(x)+"</div>"}).join("")||"<div class=info>—</div>";
+ if(stick)el.scrollTop=el.scrollHeight; document.getElementById("lgtitle").textContent=id?("#"+id):(d.job?("#"+d.job):"");}
+
+const el=id=>document.getElementById(id);
+function duration(s){if(s==null)return "—";s=Math.max(0,Math.floor(s));return Math.floor(s/3600)+"时 "+Math.floor(s%3600/60)+"分 "+s%60+"秒"}
+function value(v){return v==null?"—":esc(String(v))}
+function metric(label,v){return "<div><small>"+label+"</small>"+value(v)+"</div>"}
+async function loadDetail(id){
+ if(!id){el("detailBody").textContent="暂无任务";return}
+ const d=await J("/api/jobs/"+encodeURIComponent(id));
+ if(String(selJob)!==String(id))return;
+ if(!d||!d.job){el("connection").textContent="任务详情暂时无法获取，正在重试…";return}
+ el("connection").textContent="";const j=d.job;currentDetail=j;
+ el("runtimeEdit").style.display=(["running","queued"].includes(j.status)&&!j.stop)?"":"none";
+ if(runtimeJob!==j.id){el("runtimeTarget").value=j.target||0;runtimeJob=j.id;}
+ el("detailTitle").innerHTML="#"+value(j.id)+" "+badge(j.status);
+ const stage=j.stop&&j.status==="running"?"正在停止，等待当前请求结束":(j.stage||j.cur||"—");
+ const target=j.target>0;const percent=target?Math.min(100,Math.round((j.saved||0)/j.target*100)):0;
+ el("detailBody").innerHTML=
+ '<div class=row><strong>'+esc(stage)+'</strong><span class=sub style="margin:0">'+esc((j.cats||[]).join(" / "))+'</span></div>'+
+ (target?'<div>目标进度 '+value(j.saved)+' / '+value(j.target)+' 首 · '+percent+'%</div><div class=progress><div style="width:'+percent+'%"></div></div>':'<div class=sub>下载目标：不限，按所选歌单执行</div>')+
+ '<div class=details>'+metric("开始时间",j.started)+metric("结束时间",j.finished)+metric("运行时长",duration(j.elapsed))+
+ metric("当前歌单",j.playlist_name)+metric("歌单进度",j.playlist_total!=null?(j.playlist_index||0)+" / "+j.playlist_total:null)+metric("当前歌单歌曲数",j.playlist_tracks)+
+ metric("并发数",j.workers)+metric("等待处理",j.status==="running"?j.queued:(j.queued==null?null:0))+metric("已处理 / 已提交",j.submitted!=null?(j.processed||0)+" / "+j.submitted:null)+
+ metric("触发方式",j.tag)+metric("最后活动",j.updated)+metric("任务编号",j.id)+'</div>'+
+ (j.error?'<p class=error>'+esc(j.error)+'</p>':'')+
+ '<div class=panel-t>正在处理的歌曲（'+(j.active||[]).length+'）</div>'+
+ ((j.active||[]).map(x=>'<div class=song><b>'+esc(x.name||"未命名")+'</b> · '+esc(x.artist)+'<br><small>本次处理 '+duration(x.elapsed)+' · 请求第 '+value(x.attempt)+' / 4 次</small></div>').join("")||
+ '<div class=sub>'+(j.status==="running"?'当前没有歌曲下载，可能正在搜索歌单或读取信息':'当前没有运行中的歌曲')+'</div>')+
+ (!j.stage?'<div class=sub>这是旧版任务，部分运行指标未记录。</div>':'');
+ ["saved","skip","fail","att"].forEach(k=>el(k).textContent=j[k]||0);
+ el("cur").textContent="当前查看 #"+j.id+" · "+(j.cur||stage);
+}
+let refreshing=false;
+async function tick(){
+ if(refreshing)return;
+ refreshing=true;
+ try{
+  await loadJobs();
+  if(!selJob&&JOBS.length)selJob=JOBS[0].id;
+  const id=selJob;
+  await Promise.all([loadDetail(id),loadLog(id)]);
+ }catch(e){el("connection").textContent="连接中断，稍后自动重试"}
+ finally{refreshing=false}
+}
+function pick(id){selJob=id;el("log").textContent="正在读取…";el("detailBody").textContent="正在读取…";loadDetail(id);loadLog(id);loadJobs();}
+function followLatest(){if(JOBS.length)pick(JOBS[0].id)}
+async function sendJson(url,method,body){
+ try{const response=await fetch(url,{method,headers:{"Content-Type":"application/json"},body:JSON.stringify(body)});return await response.json()}
+ catch(e){return {ok:false,msg:"请求失败，请检查连接"}}
+}
+async function start(){
+ const c=sel();if(!c.length){alert("请先勾选类型");return}
+ const r=await sendJson("/api/start","POST",{cats:c,per:Number(per.value),workers:Number(w.value),target:Number(el("manualTarget").value)});
+ if(!r.ok){alert(r.msg==="running"?"已有任务执行中":r.msg);return}
+ selJob=r.id;el("editHint").textContent="";await tick();
+}
+function copyJob(){
+ if(!currentDetail||String(currentDetail.id)!==String(selJob))return;
+ const j=currentDetail;selectCats(j.cats||[]);per.value=j.per||6;w.value=j.workers||2;el("manualTarget").value=j.target||0;
+ el("editHint").textContent="已载入任务 #"+j.id+" 的参数，修改后点击「立即开始」创建新任务；原历史记录保留。";
+ el("cats").scrollIntoView({behavior:"smooth",block:"center"});
+}
+async function saveRunningTarget(){
+ const id=selJob;if(!id)return;
+ const r=await sendJson("/api/jobs/"+id,"PATCH",{target:Number(el("runtimeTarget").value)});
+ if(!r.ok){alert(r.msg);return}
+ runtimeJob=null;await loadDetail(id);alert(r.msg);
+}
+async function stop(){await fetch("/api/stop",{method:"POST"});tick();}
+function freqChg(){wdWrap.style.display=freq.value=="weekly"?"":"none";dyWrap.style.display=freq.value=="monthly"?"":"none";}
+function showSchedule(s){
+ nxt.textContent=(s.enabled?"已启用":"已停用")+" · 下次计划："+(s.next_str||"—")+"（北京时间） · "+(s.next_cats||[]).join(" / ");
+ el("schedulePreview").textContent="已保存的后续安排："+(s.preview||[]).map(x=>x.time+" "+x.cats.join("/")).join(" → ");
+}
+async function loadSched(){
+ const d=await J("/api/schedule");if(!d||!d.schedule)return;const s=d.schedule;
+ en.checked=!!s.enabled;freq.value=s.freq||"daily";tm.value=String(s.hour??3).padStart(2,"0")+":"+String(s.minute??0).padStart(2,"0");wd.value=s.weekday||0;dy.value=s.day||1;tgt.value=s.target??200;
+ per.value=s.per||6;w.value=s.workers||2;el("rotationMode").value=s.mode||"rotate";el("resetRotation").checked=false;
+ selectCats(s.cats||[]);showSchedule(s);freqChg();
+}
+async function saveSched(){
+ const r=await sendJson("/api/schedule","POST",{enabled:en.checked,freq:freq.value,time:tm.value,weekday:Number(wd.value),day:Number(dy.value),target:Number(tgt.value),cats:sel(),per:Number(per.value),workers:Number(w.value),mode:el("rotationMode").value,reset_rotation:el("resetRotation").checked});
+ if(!r.ok){alert(r.msg||"保存失败");return}
+ el("resetRotation").checked=false;showSchedule(r.schedule);alert("计划已更新，当前任务不受影响");
+}
+async function poll(){await tick();setTimeout(poll,1500)}poll();loadSched();
+</script>

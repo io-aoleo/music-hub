@@ -1,0 +1,17 @@
+FROM golang:1.25 AS builder
+WORKDIR /src
+ARG GOPROXY=https://proxy.golang.org,direct
+ENV GOPROXY=$GOPROXY
+COPY go.mod go.sum ./
+COPY . .
+RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build CGO_ENABLED=0 go build -o /music-dl ./cmd/music-dl
+FROM alpine:3.22
+RUN apk add --no-cache ca-certificates tzdata ffmpeg && adduser -D -u 1000 appuser
+WORKDIR /home/appuser
+COPY --from=builder /music-dl ./music-dl
+COPY --chmod=755 entrypoint.hub.sh ./entrypoint.hub.sh
+RUN mkdir -p data /music && chown -R appuser:appuser /home/appuser /music
+USER appuser
+ENV TZ=Asia/Shanghai
+EXPOSE 9981
+CMD ["./entrypoint.hub.sh"]
