@@ -55,6 +55,12 @@ def register_gateway(app,engine):
         response_headers=[(k,v) for k,v in upstream.headers.items() if k.lower() not in excluded|connection_tokens]
         # 多个 Set-Cookie 必须分开，音频的 Range / Content-Length / Content-Encoding 保持原样。
         for cookie in upstream.raw.headers.getlist("Set-Cookie"):response_headers.append(("Set-Cookie",cookie))
+        if upstream.is_redirect:
+            # requests 为准备下一次请求会先消费跳转正文，不能再从 raw 重复读取。
+            body=upstream.content
+            upstream.close();client.close()
+            response_headers=[(k,v) for k,v in response_headers if k.lower() not in {"content-length","content-encoding"}]
+            return Response(body,status=upstream.status_code,headers=response_headers)
         def chunks():
             try:
                 yield from upstream.raw.stream(65536,decode_content=False)

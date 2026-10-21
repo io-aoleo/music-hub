@@ -10,6 +10,11 @@ class FakeEngine(BaseHTTPRequestHandler):
     def log_message(self,*args):pass
     def do_GET(self):
         type(self).seen.append(dict(self.headers))
+        if self.path=="/music/redirect":
+            data=b"redirect-body"
+            self.send_response(301);self.send_header("Location","/music/")
+            self.send_header("Content-Length",str(len(data)));self.end_headers();self.wfile.write(data)
+            return
         if self.path.startswith("/music/cookies"):
             data=b'{"netease":"fixture-cookie"}'
         elif self.path.startswith("/music/healthz"):
@@ -54,6 +59,12 @@ class GatewayTest(unittest.TestCase):
         self.assertEqual(FakeEngine.seen[-1]["X-Music-Hub-Token"],self.token)
     def test_cross_origin_write_rejected(self):
         self.assertEqual(self.c.post("/api/action",headers={**self.auth,"Origin":"http://evil.test"}).status_code,403)
+    def test_redirect_body_is_preserved_after_requests_consumes_raw(self):
+        r=self.c.get("/music/redirect",headers=self.auth,buffered=True)
+        self.assertEqual(r.status_code,301)
+        self.assertEqual(r.data,b"redirect-body")
+        self.assertEqual(r.headers["Content-Length"],str(len(b"redirect-body")))
+        self.assertEqual(r.headers["Location"],"/music/")
     def test_cookie_client_internal_auth(self):
         self.assertEqual(self.engine.netease_cookie(),"fixture-cookie")
         self.assertEqual(FakeEngine.seen[-1]["X-Music-Hub-Token"],self.token)
