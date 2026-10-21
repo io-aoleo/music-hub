@@ -4,3 +4,6 @@ data
 artifacts
 __pycache__
 .deps
+
+.deploy
+backups

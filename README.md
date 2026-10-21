@@ -130,3 +130,9 @@ Python 任务状态保存在内存及原子更新的 JSON 文件中，当前必�
 详见 [NOTICE](NOTICE) 和 [LICENSE](LICENSE)；整合代码按 AGPL-3.0 发布。
 
 Alpine 依赖源可通过 `ENGINE_APK_MIRROR` 配置；初始化模板使用本次 NAS 部署验证可达的阿里云镜像，以加快 FFmpeg 依赖安装。
+
+迁移大型音乐库且原索引为空时，可在引擎初始化数据库后运行：
+
+python scripts/seed_music_index.py --database data/engine/settings.db --music 你的音乐目录
+
+该工具只从文件名和文件属性生成轻量索引，不解码或修改音频，不覆盖已有元数据；封面、时长等详细信息由引擎后台补全。
