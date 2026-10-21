@@ -30,6 +30,7 @@ services:
       dockerfile: Dockerfile.hub
       args:
         GOPROXY: ${ENGINE_GOPROXY:-https://proxy.golang.org,direct}
+        APK_MIRROR: ${ENGINE_APK_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}
     restart: unless-stopped
     environment:
       ENGINE_INTERNAL_TOKEN: ${HUB_ENGINE_TOKEN:?请先运行 scripts/configure.py}

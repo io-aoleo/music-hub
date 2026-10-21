@@ -128,3 +128,5 @@ Python 任务状态保存在内存及原子更新的 JSON 文件中，当前必�
 下载引擎基于 [guohuiyuan/go-music-dl](https://github.com/guohuiyuan/go-music-dl)，
 本仓库保留部署时源码快照及本地修改，不声称该快照等同于上游某个未修改提交。
 详见 [NOTICE](NOTICE) 和 [LICENSE](LICENSE)；整合代码按 AGPL-3.0 发布。
+
+Alpine 依赖源可通过 `ENGINE_APK_MIRROR` 配置；初始化模板使用本次 NAS 部署验证可达的阿里云镜像，以加快 FFmpeg 依赖安装。
