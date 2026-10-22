@@ -3,26 +3,28 @@
 把音乐任务中心与 Go Music DL 下载引擎整合成一个项目。一个 Git 仓库、一份 Compose、一个浏览器入口。
 
 - 任务中心：`http://NAS地址:9985/`
-- 搜索、播放、歌单、本地音乐和设置：`http://NAS地址:9985/music/`
+- 搜索、批量下载、定时任务、目录和平台设置：全部在同一 Hub 界面。
 - 下载引擎没有宿主机端口映射，无需单独部署原 9981 项目。
 
 ## 启动
 
-需要 Python 3.12+（初始化配置）和 Docker Compose v2+。运行服务时 Python 已包含在镜像中。
+需要 Docker Compose v2，无需在宿主机安装 Python 或 Go。
 
 ```sh
-python scripts/configure.py --username admin
-# 在本机 .env 中查看或修改 HUB_PASSWORD。内部令牌已自动生成。
+git clone https://github.com/io-aoleo/music-hub.git
+cd music-hub
 docker compose up -d --build
 ```
 
-浏览器第一次打开 9985 时输入 `.env` 中的 HUB_USER / HUB_PASSWORD。
-通过统一入口登录后，可直接使用下载引擎的设置页面配置各平台 Cookie。
-登录信息通过 HTTP Basic 传递，公网访问应由已有反向代理提供 HTTPS。
+打开 `http://设备地址:9985`，首次创建管理员密码，再确认音乐目录和平台 Cookie。
+没有通用默认密码；内部服务 Token 自动生成并持久保存。提供正式登录页，旧版账号升级后会引导设置自己的密码。
 
-两个服务都以 UID 1000 运行。NAS 挂载目录应允许该 UID 读写；不要对整个磁盘递归改权限。
-全新安装会把上游默认下载目录链接到 `/music`，对应宿主机 ENGINE_DOWNLOAD_PATH。
-迁移旧数据时，应在音乐设置中核对下载目录并改为 `/music`。
+音乐默认保存到项目目录 `./data/music`。使用飞牛已有音乐目录时，在 `.env` 填写自己的 `ENGINE_DOWNLOAD_PATH=/你的音乐目录` 后启动。
+网页显示实际配置映射，可浏览、创建并选择 `/music` 子目录，保存前检查读写权限。
+
+搜索结果支持勾选、全选和批量下载。下载队列、结果持久保存，支持取消等待项和失败重试；任务和设置均在 Hub 界面内完成。
+
+完整的 **NAS 路径映射、权限处理、旧版升级、密码找回、HTTPS 与验证说明**见 [开箱即用指南](docs/getting-started.md)。
 
 ## 任务编辑
 
@@ -79,9 +81,9 @@ SQLite 使用 backup API 复制一致性快照，任务历史、日志、下载�
 - MUSIC_DL_*：只由 Compose 传入 Go 服务，沿用上游配置名称。
 - TZ：两个容器统一使用北京时间。
 
-HUB_ENGINE_TOKEN 在两个容器中映射成不同配置字段，浏览器不接收这个令牌。
+初始化服务自动生成内部令牌，Hub 和引擎从只读共享配置卷读取；旧版 HUB_ENGINE_TOKEN 可迁移复用，浏览器不接收这个令牌。
 任务服务通过内部 API 读取 Cookie、发起下载，不直接打开引擎 SQLite。
-关闭 HUB_AUTH_REQUIRED 时，任务中心不要求登录，而音乐设置仍保留引擎自己的管理员登录。
+管理员密码以哈希形式保存在任务数据卷，登录会话重启后仍有效。网页写操作使用 CSRF Token。
 生产部署建议保持默认鉴权开启。
 
 ## 代码结构
@@ -90,7 +92,11 @@ HUB_ENGINE_TOKEN 在两个容器中映射成不同配置字段，浏览器不接
 app.py                    任务执行、状态、编辑 API、定时调度
 engine_client.py          下载引擎内部接口适配与 Cookie 缓存
 gateway.py                统一鉴权、网页与音频流转发、健康检查
-templates/index.html      任务中心
+templates/                统一音乐界面、首次设置与登录
+static/hub.js             搜索、多选下载、目录浏览和设置
+auth.py                   管理员迁移、密码和 Cookie 会话
+download_queue.py         SQLite 持久化批量下载队列
+storage.py                目录映射、边界与写入检测
 vendor/go-music-dl/        可从源码构建的 Go 下载引擎，保留上游许可
 scripts/                  初始化配置、旧数据迁移
 tests/                    任务、轮换、网关与前端回归检查
@@ -117,7 +123,7 @@ Python 任务状态保存在内存及原子更新的 JSON 文件中，当前必�
 不要直接增加 worker 数量，否则会重复运行调度器。增加实例前应迁移到 SQLite/PostgreSQL 持久化任务队列并拆出独立调度进程。
 
 更换下载引擎时主要修改 engine_client.py；修改任务页面不需要重编译 Go。
-初始化模板使用本次在 NAS 验证可达的 `ENGINE_GOPROXY=https://goproxy.cn,direct`。
+如依赖下载较慢，可在 .env 使用 `ENGINE_GOPROXY=https://goproxy.cn,direct`。
 其他网络环境可改为 `https://proxy.golang.org,direct`。Go 构建只下载服务用到的依赖，不预下载桌面版全部依赖。
 
 可选 CI 模板在 `docs/checks.workflow.yml`。账号具有 GitHub Actions 工作流写入权限时，
@@ -129,7 +135,7 @@ Python 任务状态保存在内存及原子更新的 JSON 文件中，当前必�
 本仓库保留部署时源码快照及本地修改，不声称该快照等同于上游某个未修改提交。
 详见 [NOTICE](NOTICE) 和 [LICENSE](LICENSE)；整合代码按 AGPL-3.0 发布。
 
-Alpine 依赖源可通过 `ENGINE_APK_MIRROR` 配置；初始化模板使用本次 NAS 部署验证可达的阿里云镜像，以加快 FFmpeg 依赖安装。
+Alpine 依赖源可通过 `ENGINE_APK_MIRROR` 配置；可按网络情况配置阿里云镜像，以加快 FFmpeg 依赖安装。
 
 迁移大型音乐库且原索引为空时，可在引擎初始化数据库后运行：
 

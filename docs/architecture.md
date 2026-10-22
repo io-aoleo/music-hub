@@ -7,12 +7,13 @@ Go 保留成熟的音乐源适配、音频下载、歌词、音乐库与设置�
 
 Python 与 Go 分别运行在 hub 和 engine 容器中。只有 hub 映射宿主机 9985；
 engine 的 9981 仅在 Compose 内部网络可见，Python 使用服务名 engine 发现它。
+一次性 init 服务初始化空卷和内部令牌，成功退出后才启动引擎与 Hub；不会递归改动已有音乐库权限。
 
 ## 请求流
 
-浏览器访问 / 时展示任务中心；/api/* 由 Python 处理。
+浏览器访问 / 时展示统一音乐界面；/api/* 由 Python 处理。首次访问进入 /setup 创建管理员，已有账号使用 /login。
 浏览器访问 /music/* 时，Python 转发至 Go 并流式返回响应，保留 Range、多个 Set-Cookie 和音频响应头。
-网关的 HTTP Basic 账号是统一入口账号，不使用 SSH、数据库或原引擎管理员密码。
+网页使用签名会话 Cookie 和 CSRF Token；密码仅以哈希形式保存在任务卷。HTTP Basic 仅保留给 CLI 兼容使用，不弹出浏览器原生登录框。
 开启统一鉴权时，网关为已认证请求附加内部令牌；外部传入的同名令牌和 Authorization 不转发。
 
 定时器选出本轮类型，创建一次任务并保存下一轮位置。任务通过引擎内部接口读取网易云 Cookie，
@@ -20,8 +21,8 @@ engine 的 9981 仅在 Compose 内部网络可见，Python 使用服务名 engin
 
 ## 数据所有权
 
-Python 拥有 tasks 目录：jobs.json、jobs/*.log、schedule.json、seen.txt、done_pl.txt。
-Go 拥有 engine 数据目录和音乐目录：settings.db、收藏、索引、下载记录、音频。
+Python 拥有 tasks 目录：jobs.json、jobs/*.log、schedule.json、seen.txt、done_pl.txt，以及账号 accounts.sqlite3 和单曲/批量队列 downloads.sqlite3。
+Go 拥有 engine 数据目录：settings.db、收藏、索引、下载记录；Hub 和引擎共享挂载 /music，以相同 UID 检查和写入音乐目录。
 跨模块通过 API 交互，不同时修改同一数据库，也不依赖宿主机固定 IP。
 
 Cookie 缓存最多 30 秒，页面修改后下一个缓存周期自动生效。内部请求禁用环境代理，
@@ -40,7 +41,8 @@ Cookie 缓存最多 30 秒，页面修改后下一个缓存周期自动生效。
 ## 生命周期与故障
 
 任务开始时标记阶段并落盘；每首歌处理结束后更新状态；终态必须填写结束时间并清理 active。
-进程重启时，遗留 running/queued 标记为 interrupted。
+按类型/歌单的旧任务在进程重启时，遗留 running/queued 标记为 interrupted。
+单曲/多选下载队列使用 SQLite 事务领取工作，queued 在重启后继续处理，running 标记 interrupted 并允许重试；成功和失败记录持久保存。
 外部请求有超时与有限重试；日志不输出 Cookie、密码、令牌或底层响应体。
 
 Gunicorn 运行一个 worker，避免多份调度器。JSON 方案满足当前 NAS 单用户任务场景，

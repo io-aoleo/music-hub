@@ -3,7 +3,7 @@ const nodes={};
 function element(){return {innerHTML:"",textContent:"",style:{},dataset:{},value:"",classList:{toggle(){}},appendChild(){},scrollIntoView(){},querySelectorAll(){return []},scrollTop:0,clientHeight:360,scrollHeight:360}}
 const get=id=>nodes[id]||(nodes[id]=element());
 const jobs=[{id:2,status:"running",cats:["流行"],saved:1,skip:0,fail:0,att:1},{id:1,status:"done",cats:["欧美"],saved:5,skip:0,fail:0,att:5}];
-const context={document:{getElementById:get,createElement:element},setTimeout(){},alert(){},console,
+const context={document:{getElementById:get,createElement:element,querySelectorAll(){return []}},switchView(){},setTimeout(){},setInterval(){},alert(){},console,
 fetch:async path=>({json:async()=>{
  if(path==="/api/jobs")return {jobs};
  if(path==="/api/schedule")return {schedule:{}};
