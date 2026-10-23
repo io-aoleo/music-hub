@@ -17,6 +17,7 @@ class DownloadQueue:
         self.path = Path(path); self.path.parent.mkdir(parents=True, exist_ok=True)
         self.download = download
         self.condition = threading.Condition()
+        self.db_lock = threading.RLock()
         with self.connect() as db:
             db.execute('CREATE TABLE IF NOT EXISTS downloads (id TEXT PRIMARY KEY, song TEXT NOT NULL, status TEXT NOT NULL, message TEXT NOT NULL, created REAL NOT NULL, updated REAL NOT NULL, attempts INTEGER NOT NULL DEFAULT 0)')
             db.execute("UPDATE downloads SET status='interrupted', message='服务重启中断，请点击重试', updated=? WHERE status='running'", (time.time(),))
@@ -27,12 +28,16 @@ class DownloadQueue:
 
     @contextmanager
     def connect(self):
-        db = sqlite3.connect(self.path, timeout=20)
-        db.row_factory = sqlite3.Row
-        try:
-            with db: yield db
-        finally:
-            db.close()
+        # The supported runtime is one process. Serialize its short transactions
+        # so workers do not exhaust SQLite's busy timeout on a slow NAS disk.
+        # Network downloads run after the claiming transaction has released this lock.
+        with self.db_lock:
+            db = sqlite3.connect(self.path, timeout=20)
+            db.row_factory = sqlite3.Row
+            try:
+                with db: yield db
+            finally:
+                db.close()
 
     @staticmethod
     def validate(songs):

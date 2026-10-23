@@ -42,14 +42,17 @@ class QueueTest(unittest.TestCase):
         self.assertEqual(self.queue.list()['counts'],{'error':1,'done':1})
         self.assertNotIn('sensitive',str(self.queue.list()))
     def test_workers_claim_each_song_once(self):
-        seen=[];self.queue.download=lambda song: seen.append(song['id']) or {'saved':True}
+        seen=[];errors=[];self.queue.download=lambda song: seen.append(song['id']) or {'saved':True}
         self.queue.enqueue([{**self.song,'id':str(i)} for i in range(30)])
         def consume():
-            while self.queue.run_once(): pass
+            try:
+                while self.queue.run_once(): pass
+            except Exception as error:errors.append(error)
         threads=[threading.Thread(target=consume) for _ in range(4)]
         for thread in threads: thread.start()
         for thread in threads: thread.join()
         self.assertEqual(len(seen),30);self.assertEqual(len(set(seen)),30)
+        self.assertEqual(errors,[], 'Background worker errors must fail the concurrency test')
     def test_safe_provider_errors_are_actionable(self):
         def fail(song):raise DownloadFailure('平台请求限流，请稍后重试')
         self.queue.download=fail;self.queue.enqueue([self.song]);self.queue.run_once()
