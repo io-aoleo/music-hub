@@ -82,7 +82,18 @@ async function loadDownloads(){
   }
  }catch(error){byId('downloadList').textContent=error.message}
 }
-function showMapping(mapping){byId('mappingInfo').textContent='宿主机 '+mapping.host+' → 容器 '+mapping.container}
+let currentHostMusicPath='';
+function showMapping(mapping){
+ byId('mappingInfo').textContent='当前生效：宿主机 '+mapping.host+' → 容器 '+mapping.container;
+ if(currentHostMusicPath!==mapping.host){currentHostMusicPath=mapping.host;if(document.activeElement!==byId('hostMusicPath'))byId('hostMusicPath').value=mapping.host}
+}
+function clearHostMappingPlan(){byId('hostMappingPlan').hidden=true;byId('hostMappingConfig').value='';byId('hostMappingStatus').textContent='待生成配置；尚未更改当前挂载'}
+function prepareHostMapping(){
+ clearHostMappingPlan();const path=byId('hostMusicPath').value.trim().replace(/\/+$/,'');
+ if(!path.startsWith('/')||path.includes('\\')||/[\x00-\x1f\x7f'$]/.test(path)||path.split('/').some(p=>p==='..'||p==='.')){byId('hostMappingStatus').textContent='请输入 NAS 上的绝对目录（例如 /vol1/1000/music），不能使用根目录、相对路径、控制字符、反斜杠、单引号或 $';return}
+ byId('hostMappingConfig').value="ENGINE_DOWNLOAD_PATH='"+path+"'";
+ byId('hostMappingPlan').hidden=false;byId('hostMappingStatus').textContent='配置已生成，待在原 Compose 项目中应用。容器内仍使用 /music';
+}
 function updatePlatformStatus(tokens){Object.keys(platforms).forEach(k=>byId('token-status-'+k).textContent=tokens[k]?'已配置 · 留空保留':'尚未配置')}
 async function refreshPlatformStatus(){const data=await api('/api/preferences');updatePlatformStatus(data.tokens)}
 async function checkStorage(){
