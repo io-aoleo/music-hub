@@ -2,8 +2,10 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py engine_client.py gateway.py ./
+COPY app.py engine_client.py gateway.py auth.py hub_features.py storage.py download_queue.py search_providers.py qr_login.py ./
+COPY scripts ./scripts
 COPY templates ./templates
+COPY static ./static
 RUN useradd --uid 1000 --create-home hub && mkdir -p /data/tasks && chown -R hub:hub /app /data && chmod -R u=rwX,go=rX /app
 USER hub
 EXPOSE 8000

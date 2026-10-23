@@ -11,7 +11,14 @@ def job():
                 saved=0,skip=0,fail=0,att=0,cur="",stop=False,active={},submitted=0,processed=0)
 
 class DetailsTest(unittest.TestCase):
+    def test_storage_failure_stops_before_downloading(self):
+        j=job();m.JOBS.append(j)
+        with patch.object(m.engine,'check_storage',side_effect=ValueError('音乐目录不可写')),patch.object(m,'search_pl') as search:
+            m.run_job(j)
+        self.assertEqual(j['status'],'error');search.assert_not_called()
     def setUp(self):
+        storage_check=patch.object(m.engine,"check_storage")
+        storage_check.start();self.addCleanup(storage_check.stop)
         m.JOBS.clear();m.SEEN.clear();m.DONE.clear()
         self.client=m.app.test_client()
     def test_old_job_and_missing_job(self):

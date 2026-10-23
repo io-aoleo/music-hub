@@ -12,3 +12,7 @@ identity is asserted for that snapshot.
 Music Hub changes: Python task scheduling and UI, category rotation and editing,
 a single authenticated gateway, Compose packaging, internal service token support,
 navigation links, migration tools, documentation and tests.
+
+Paginated provider field mappings in search_providers.py are adapted from
+guohuiyuan/music-lib revision 28e1080ba416, the AGPL-3.0 dependency pinned by the
+engine. Source: https://github.com/guohuiyuan/music-lib

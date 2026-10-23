@@ -1,32 +1,12 @@
 """统一入口：鉴权、健康检查、向内部 Go 服务转发流式音频与网页。"""
-import os,hmac
-from urllib.parse import urlsplit
 import requests
-from flask import request,Response,jsonify,stream_with_context
+from flask import request,Response,jsonify,stream_with_context,redirect
 
 HOP={"connection","keep-alive","proxy-authenticate","proxy-authorization","te","trailer","transfer-encoding","upgrade"}
 
 def register_gateway(app,engine):
-    required=os.environ.get("HUB_AUTH_REQUIRED","true").lower()=="true"
-    username=os.environ.get("HUB_USER","admin")
-    password=os.environ.get("HUB_PASSWORD","")
-    testing=os.environ.get("HUB_TESTING",os.environ.get("MUSIC_WEBUI_TESTING"))=="1"
-    if required and not testing and (not password or len(engine.token)<32):
-        raise RuntimeError("请先运行 scripts/configure.py，配置 HUB_PASSWORD 和 HUB_ENGINE_TOKEN")
-    @app.before_request
-    def authenticate():
-        if request.path=="/healthz":return None
-        # 阻止网页跨站提交任务或配置；无 Origin 的 CLI 仍可用账号鉴权。
-        if request.method not in ("GET","HEAD","OPTIONS"):
-            origin=request.headers.get("Origin")
-            if origin and urlsplit(origin).netloc!=request.host:
-                return jsonify(ok=False,msg="请求来源不匹配"),403
-        if not required:return None
-        auth=request.authorization
-        if not (auth and auth.type.lower()=="basic" and
-                hmac.compare_digest((auth.username or "").encode(),username.encode()) and
-                hmac.compare_digest((auth.password or "").encode(),password.encode())):
-            return Response("请登录 Music Hub",401,{"WWW-Authenticate":'Basic realm="Music Hub", charset="UTF-8"'})
+    from auth import register_auth
+    required=register_auth(app)
     @app.get("/healthz")
     def health():
         ok=engine.healthy()
@@ -35,6 +15,8 @@ def register_gateway(app,engine):
     @app.route("/music/",methods=["GET","HEAD","POST","PUT","PATCH","DELETE","OPTIONS"])
     @app.route("/music/<path:subpath>",methods=["GET","HEAD","POST","PUT","PATCH","DELETE","OPTIONS"])
     def music_proxy(subpath=""):
+        if not subpath and request.method in ("GET","HEAD"):
+            return redirect("/")
         # 目的地址只来自服务端配置；客户端认证头和内部令牌绝不原样转发。
         headers={k:v for k,v in request.headers if k.lower() not in HOP|{"authorization","x-music-hub-token","content-length"}}
         headers["Host"]=request.host

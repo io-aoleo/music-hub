@@ -176,6 +176,7 @@ def set_stage(job,stage,**fields):
 def run_job(job):
     set_stage(job,"登录下载服务",status="running",started=time.strftime("%F %T"),active={})
     try:
+        engine.check_storage()
         H=hdr(mdl_login())
         need=max(1,int(job["per"])); todo=[]
         for c in job["cats"]:
@@ -360,6 +361,8 @@ def watchdog():
 if os.environ.get("HUB_TESTING",os.environ.get("MUSIC_WEBUI_TESTING"))!="1": threading.Thread(target=watchdog,daemon=True).start()
 app=Flask(__name__)
 register_gateway(app,engine)
+from hub_features import register_features
+register_features(app,engine)
 _p=os.path.join(os.path.dirname(os.path.abspath(__file__)),"templates","index.html")
 PAGE=open(_p,encoding="utf-8").read() if os.path.exists(_p) else "no page"
 @app.route("/")

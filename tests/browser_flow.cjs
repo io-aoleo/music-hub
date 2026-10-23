@@ -1,0 +1,57 @@
+/* Run browser_server.py first. PLAYWRIGHT_MODULE and BROWSER_EXECUTABLE are optional. */
+const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'playwright');
+const assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+(async()=>{
+ const browser=await chromium.launch({headless:true,...(process.env.BROWSER_EXECUTABLE?{executablePath:process.env.BROWSER_EXECUTABLE}:{})});
+ const context=await browser.newContext({viewport:{width:1440,height:1000}});const page=await context.newPage(),errors=[];
+ page.on('pageerror',e=>errors.push(e.message));
+ const output=path.resolve(process.env.BROWSER_OUTPUT||'artifacts');fs.mkdirSync(output,{recursive:true});
+ await page.goto(process.env.HUB_TEST_URL||'http://127.0.0.1:18985');await page.waitForURL('**/setup');
+ await page.locator('#submit:not([disabled])').waitFor();await page.screenshot({path:path.join(output,'first-run.png'),fullPage:true});
+ await page.locator('#username').fill('browser-admin');await page.locator('#password').fill('browser-test-password');await page.locator('#confirmation').fill('browser-test-password');await page.locator('#submit').click();
+ await page.locator('#view-settings:not([hidden])').waitFor();await page.waitForFunction(()=>document.getElementById('storageStatus').textContent.includes('目录可写'));
+ await page.getByRole('button',{name:'选择 / 创建子目录',exact:true}).click();await page.locator('#newDirectoryName').fill('测试音乐');await page.getByRole('button',{name:'创建子目录',exact:true}).click();
+ await page.waitForFunction(()=>document.getElementById('directoryPath').textContent.endsWith('/测试音乐'));
+ await page.getByRole('button',{name:'使用此目录',exact:true}).click();await page.locator('#savePreferencesButton').click();await page.waitForFunction(()=>document.getElementById('settingsState').textContent==='设置已保存');
+ await page.screenshot({path:path.join(output,'settings.png'),fullPage:true});
+ await page.locator('#searchQuery').fill('测试');await page.locator('#searchButton').click();await page.locator('.song-choice').first().waitFor();await page.locator('#selectPage').check();
+ assert.equal(await page.locator('#selectionCount').textContent(),'已选 3 首');await page.locator('#batchDownload').click();await page.locator('#view-downloads:not([hidden])').waitFor();
+ await page.waitForFunction(()=>document.getElementById('downloadSummary').textContent.includes('3已完成'));
+ await page.screenshot({path:path.join(output,'downloads.png'),fullPage:true});
+ assert.equal(new URL(page.url()).pathname,'/');
+ await page.reload();await page.evaluate(()=>switchView('downloads'));await page.waitForFunction(()=>document.getElementById('downloadSummary').textContent.includes('3已完成'));
+ // Real navigation requests, boundary buttons, cross-page selections and page-size reset.
+ await page.locator('#searchQuery').fill('分页');await page.locator('#searchButton').click();
+ await page.waitForFunction(()=>document.querySelectorAll('.song-choice').length===20);
+ await page.locator('#selectPage').check();assert.equal(await page.locator('#selectionCount').textContent(),'已选 20 首');
+ await page.locator('#searchNext').click();await page.waitForFunction(()=>document.getElementById('searchPageInfo').textContent==='第 2 / 3 页');
+ await page.locator('.song-choice').first().check();assert.equal(await page.locator('#selectionCount').textContent(),'已选 21 首');
+ await page.locator('#searchPrevious').click();await page.waitForFunction(()=>document.getElementById('searchPageInfo').textContent==='第 1 / 3 页');assert(await page.locator('#selectPage').isChecked());
+ await page.locator('#searchGoPage').fill('3');await page.locator('#searchGoButton').click();await page.waitForFunction(()=>document.querySelectorAll('.song-choice').length===5);assert(await page.locator('#searchNext').isDisabled());
+ await page.locator('#searchPageSize').selectOption('50');await page.waitForFunction(()=>document.querySelectorAll('.song-choice').length===45);assert(await page.locator('#searchPrevious').isDisabled());assert.equal(await page.locator('#selectionCount').textContent(),'已选 21 首');
+ await page.screenshot({path:path.join(output,'search-pagination.png'),fullPage:true});
+ await page.evaluate(()=>clearSelection());
+ // QR waiting -> scanned -> persisted success, keeping unrelated unsaved fields intact.
+ await page.evaluate(()=>switchView('settings'));await page.waitForFunction(()=>document.getElementById('storageStatus').textContent.includes('目录可写'));
+ await page.locator('#downloadDir').fill('/music/尚未保存');await page.locator('#token-qq').fill('unsaved-qq-value');await page.locator('#token-netease').fill('old-unsaved-netease-value');await page.locator('#clear-netease').check();
+ await page.locator('#neteaseQRLogin').click();await page.locator('#qrLoginImage:not([hidden])').waitFor();
+ assert(await page.locator('#qrLoginImage').evaluate(image=>image.complete&&image.naturalWidth>0));
+ await page.waitForFunction(()=>document.getElementById('qrLoginState').textContent.includes('已扫码'));
+ await page.waitForFunction(()=>document.getElementById('qrLoginState').textContent.includes('登录成功'));
+ assert.equal(await page.locator('#downloadDir').inputValue(),'/music/尚未保存');assert.equal(await page.locator('#token-qq').inputValue(),'unsaved-qq-value');assert.equal(await page.locator('#token-netease').inputValue(),'');assert(!await page.locator('#clear-netease').isChecked());
+ assert((await page.locator('#token-status-netease').textContent()).includes('已配置'));
+ await page.screenshot({path:path.join(output,'qr-login.png'),fullPage:true});
+ await page.locator('#qrLoginRefresh').click();await page.waitForFunction(()=>document.getElementById('qrLoginState').textContent.includes('二维码已过期'));
+ await page.locator('#qrLoginRefresh').click();await page.locator('#qrLoginImage:not([hidden])').waitFor();
+ const cancelled=page.waitForResponse(r=>r.url().includes('/cancel')&&r.request().method()==='POST');
+ await page.locator('#qrLoginDialog').getByRole('button',{name:'关闭',exact:true}).click();assert((await cancelled).ok());
+ await page.getByRole('button',{name:'退出',exact:true}).click();await page.waitForURL('**/login');await page.locator('#submit:not([disabled])').waitFor();await page.screenshot({path:path.join(output,'login.png'),fullPage:true});
+ await page.setViewportSize({width:390,height:844});await page.screenshot({path:path.join(output,'login-mobile.png'),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.locator('#username').fill('browser-admin');await page.locator('#password').fill('browser-test-password');await page.locator('#submit').click();await page.waitForURL('**/');await page.locator('#searchQuery').waitFor();
+ await page.screenshot({path:path.join(output,'mobile.png'),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.locator('#searchQuery').fill('分页');await page.locator('#searchButton').click();await page.waitForFunction(()=>document.querySelectorAll('.song-choice').length===20);
+ await page.locator('#searchNext').click();await page.waitForFunction(()=>document.getElementById('searchPageInfo').textContent==='第 2 / 3 页');assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));
+ await page.evaluate(()=>switchView('settings'));await page.locator('#neteaseQRLogin').click();await page.locator('#qrLoginImage:not([hidden])').waitFor();
+ await page.screenshot({path:path.join(output,'qr-login-mobile.png'),fullPage:true});assert(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth));await page.locator('#qrLoginDialog').getByRole('button',{name:'关闭',exact:true}).click();
+ assert.deepEqual(errors,[]);console.log('PASS: setup/auth/storage/batch persistence, true pagination and cross-page selection, QR scanned/success/expired/refresh/cancel, unsaved settings preservation, desktop/mobile layouts');await browser.close();
+})().catch(error=>{console.error(error);process.exit(1)});

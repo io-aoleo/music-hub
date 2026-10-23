@@ -1,4 +1,4 @@
-import base64,json,threading,unittest,os
+import base64,json,threading,unittest,os,tempfile
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
 from unittest.mock import patch
 from flask import Flask
@@ -39,9 +39,11 @@ class GatewayTest(unittest.TestCase):
         cls.server.shutdown();cls.server.server_close();cls.thread.join()
     def setUp(self):
         self.token="t"*43
-        with patch.dict(os.environ,{"HUB_AUTH_REQUIRED":"true","HUB_USER":"admin","HUB_PASSWORD":"fixture-password","HUB_ENGINE_TOKEN":self.token,"HUB_ENGINE_URL":"http://127.0.0.1:"+str(self.server.server_port),"HUB_TESTING":"0"}):
+        self.temp=tempfile.TemporaryDirectory();self.addCleanup(self.temp.cleanup)
+        with patch.dict(os.environ,{"HUB_DATA_DIR":self.temp.name,"HUB_AUTH_REQUIRED":"true","HUB_USER":"admin","HUB_PASSWORD":"fixture-password","HUB_ENGINE_TOKEN":self.token,"HUB_ENGINE_URL":"http://127.0.0.1:"+str(self.server.server_port),"HUB_TESTING":"0"}):
             self.engine=EngineClient()
             app=Flask("test-gateway");register_gateway(app,self.engine)
+            store=app.extensions['accounts'];store.change(store.get()[2],'fixture-password')
             app.add_url_rule("/api/action",view_func=lambda:("ok",200),methods=["POST"])
             self.c=app.test_client()
         self.auth={"Authorization":"Basic "+base64.b64encode(b"admin:fixture-password").decode()}
@@ -49,7 +51,7 @@ class GatewayTest(unittest.TestCase):
     def test_protects_all_routes_but_health(self):
         self.assertEqual(self.c.get("/music/").status_code,401)
         self.assertEqual(self.c.get("/healthz").status_code,200)
-        self.assertEqual(self.c.get("/music/",headers=self.auth).status_code,200)
+        self.assertEqual(self.c.get("/music/",headers=self.auth).headers['Location'],'/')
     def test_audio_range_and_multiple_cookies(self):
         r=self.c.get("/music/download?id=123",headers={**self.auth,"Range":"bytes=0-10","X-Music-Hub-Token":"attacker"},buffered=True)
         self.assertEqual(r.status_code,206);self.assertEqual(r.data,b"audio-bytes")
@@ -72,8 +74,12 @@ class GatewayTest(unittest.TestCase):
         with patch.dict(os.environ,{"HUB_AUTH_REQUIRED":"false"}):
             app=Flask("test-public");register_gateway(app,self.engine)
         c=app.test_client()
-        self.assertEqual(c.get("/music/",headers={"X-Music-Hub-Token":self.token}).status_code,200)
+        self.assertEqual(c.get("/music/test",headers={"X-Music-Hub-Token":self.token}).status_code,200)
         self.assertNotIn("X-Music-Hub-Token",FakeEngine.seen[-1])
-    def test_no_insecure_startup(self):
-        with patch.dict(os.environ,{"HUB_AUTH_REQUIRED":"true","HUB_PASSWORD":"","HUB_TESTING":"0","MUSIC_WEBUI_TESTING":"0"}):
-            with self.assertRaises(RuntimeError):register_gateway(Flask("fail"),self.engine)
+    def test_fresh_start_requires_web_setup(self):
+        with tempfile.TemporaryDirectory() as folder:
+            with patch.dict(os.environ,{"HUB_DATA_DIR":folder,"HUB_AUTH_REQUIRED":"true","HUB_PASSWORD":"","HUB_TESTING":"0","MUSIC_WEBUI_TESTING":"0"}):
+                app=Flask('fresh');register_gateway(app,self.engine)
+            client=app.test_client()
+            self.assertEqual(client.get('/').headers['Location'],'/setup')
+            self.assertNotIn('WWW-Authenticate',client.get('/api/jobs').headers)
