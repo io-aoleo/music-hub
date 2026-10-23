@@ -2,6 +2,7 @@
 const byId=id=>document.getElementById(id);
 const platforms={netease:'网易云音乐',qq:'QQ 音乐',kuwo:'酷我音乐',kugou:'酷狗音乐',migu:'咪咕音乐'};
 let musicSource='netease',searchResults=[],searchVersion=0,directoryPath='/music',csrfToken='';
+let searchContext=null,searchLoading=false;
 const selection=new Map();
 const nativeFetch=window.fetch.bind(window);
 const authReady=nativeFetch('/api/auth/status').then(r=>r.json()).then(state=>{csrfToken=state.csrf||'';return state});
@@ -30,21 +31,36 @@ function updateSelection(){
 }
 function selectSearchPage(checked){for(const song of searchResults){if(checked){if(selection.size>=200&&!selection.has(songKey(song))){notify('每次最多选择 200 首');break}selection.set(songKey(song),song)}else selection.delete(songKey(song))}updateSelection()}
 function clearSelection(){selection.clear();updateSelection()}
-async function searchSongs(){
- const query=byId('searchQuery').value.trim();if(!query)return;switchView('discover');const version=++searchVersion;
- byId('searchButton').disabled=true;byId('searchState').textContent='正在搜索 '+platforms[musicSource]+'…';byId('searchResults').className='empty';byId('searchResults').textContent='正在寻找喜欢的旋律…';byId('searchCount').textContent='';
- try{
-  const data=await api('/api/search?'+new URLSearchParams({q:query,source:musicSource}));if(version!==searchVersion)return;
-  searchResults=data.songs||[];byId('searchCount').textContent=' · '+searchResults.length+' 首';byId('searchState').textContent='';const list=byId('searchResults');list.replaceChildren();list.className=searchResults.length?'':'empty';if(!searchResults.length)list.textContent='未找到歌曲，请更换关键词或音乐来源';
+function renderSearchPage(data){
+  searchResults=data.songs||[];byId('searchCount').textContent=data.total==null?' · 本页 '+searchResults.length+' 首':' · 共 '+data.total+' 首';const list=byId('searchResults');list.replaceChildren();list.className=searchResults.length?'':'empty';if(!searchResults.length)list.textContent=data.page>1?'这一页没有结果，可返回上一页':'未找到歌曲，请更换关键词或音乐来源';
   searchResults.forEach((song,index)=>{
    const row=document.createElement('div');row.className='track';
    const checkbox=document.createElement('input');checkbox.type='checkbox';checkbox.className='song-choice';checkbox.dataset.songKey=songKey(song);checkbox.setAttribute('aria-label','选择 '+song.name);
    checkbox.onchange=()=>{if(checkbox.checked){if(selection.size>=200){checkbox.checked=false;notify('每次最多选择 200 首');return}selection.set(songKey(song),song)}else selection.delete(songKey(song));updateSelection()};row.appendChild(checkbox);
-   const content=document.createElement('div');content.style.display='contents';content.innerHTML='<small>'+String(index+1).padStart(2,'0')+'</small><div class="track-title">'+safeText(song.name)+'</div><div class="artist">'+safeText(song.artist)+'</div><div class="album sub">'+safeText(song.album)+'</div>';row.appendChild(content);
+   const content=document.createElement('div');content.style.display='contents';content.innerHTML='<small>'+String((data.page-1)*data.page_size+index+1).padStart(2,'0')+'</small><div class="track-title">'+safeText(song.name)+'</div><div class="artist">'+safeText(song.artist)+'</div><div class="album sub">'+safeText(song.album)+'</div>';row.appendChild(content);
    const button=document.createElement('button');button.textContent='↓ 下载';button.onclick=()=>downloadSong(song,button);row.appendChild(button);list.appendChild(row);
-  });updateSelection();
- }catch(error){if(version===searchVersion){byId('searchResults').textContent=error.message;byId('searchState').textContent='搜索未完成，可稍后重试'}}
- finally{if(version===searchVersion)byId('searchButton').disabled=false}
+  });updateSelection();renderSearchPagination();
+}
+function renderSearchPagination(){
+ const data=searchContext;byId('searchPagination').hidden=!data;
+ byId('searchPrevious').disabled=searchLoading||!data||data.page<=1;
+ byId('searchNext').disabled=searchLoading||!data||!data.has_more;
+ byId('searchGoButton').disabled=searchLoading||!data;byId('searchPageSize').disabled=searchLoading;
+ if(data){byId('searchPageInfo').textContent='第 '+data.page+(data.total_pages?' / '+data.total_pages:'')+' 页';byId('searchGoPage').max=data.total_pages||1000;byId('searchGoPage').value=data.page}
+}
+function goSearchPage(){const value=Number(byId('searchGoPage').value),max=searchContext?.total_pages||1000;if(!Number.isInteger(value)||value<1||value>max){notify('请输入 1～'+max+' 之间的页码');return}searchSongs(value)}
+async function searchSongs(page=null){
+ const navigation=Number.isInteger(page);if(navigation&&!searchContext)return;
+ const query=navigation?searchContext.query:byId('searchQuery').value.trim();if(!query)return;
+ const source=navigation?searchContext.source:musicSource,size=Number(byId('searchPageSize').value)||20;
+ page=navigation?page:1;switchView('discover');const version=++searchVersion;
+ searchLoading=true;byId('searchButton').disabled=true;byId('searchState').textContent='正在搜索 '+platforms[source]+' · 第 '+page+' 页…';renderSearchPagination();
+ if(!searchContext){byId('searchResults').className='empty';byId('searchResults').textContent='正在寻找喜欢的旋律…'}
+ try{
+  const data=await api('/api/search?'+new URLSearchParams({q:query,source,page,page_size:size}));if(version!==searchVersion)return;
+  searchContext={...data,query,source};renderSearchPage(searchContext);byId('searchState').textContent='';if(navigation)byId('searchResults').scrollIntoView({behavior:'smooth',block:'start'});
+ }catch(error){if(version===searchVersion){if(!searchContext)byId('searchResults').textContent=error.message;byId('searchState').textContent=error.message+(searchContext?' · 仍显示上次成功加载的结果':'')}}
+ finally{if(version===searchVersion){searchLoading=false;byId('searchButton').disabled=false;renderSearchPagination()}}
 }
 async function downloadSong(song,button){button.disabled=true;try{const data=await api('/api/downloads','POST',song);button.textContent='查看下载';button.onclick=()=>switchView('downloads');notify(data.added?'已加入下载「'+song.name+'」':'歌曲已在队列中，可到下载中心查看')}catch(error){notify(error.message)}finally{button.disabled=false}}
 async function downloadSelected(){
@@ -67,13 +83,15 @@ async function loadDownloads(){
  }catch(error){byId('downloadList').textContent=error.message}
 }
 function showMapping(mapping){byId('mappingInfo').textContent='宿主机 '+mapping.host+' → 容器 '+mapping.container}
+function updatePlatformStatus(tokens){Object.keys(platforms).forEach(k=>byId('token-status-'+k).textContent=tokens[k]?'已配置 · 留空保留':'尚未配置')}
+async function refreshPlatformStatus(){const data=await api('/api/preferences');updatePlatformStatus(data.tokens)}
 async function checkStorage(){
  const state=byId('storageStatus');state.textContent='正在检查目录和写入权限…';state.className='';
  try{const data=await api('/api/storage?'+new URLSearchParams({path:byId('downloadDir').value||'/music'}));showMapping(data.mapping);state.textContent=data.writable?'目录可写 · 运行用户 UID '+data.uid:data.error;state.className=data.writable?'status-ok':'status-error'}catch(error){state.textContent=error.message;state.className='status-error'}
 }
 async function loadPreferences(){
  byId('settingsState').textContent='正在读取设置…';
- try{const data=await api('/api/preferences');if(document.activeElement!==byId('downloadDir'))byId('downloadDir').value=data.downloadDir;showMapping(data.mapping);Object.keys(platforms).forEach(k=>byId('token-status-'+k).textContent=data.tokens[k]?'已配置 · 留空保留':'尚未配置');byId('settingsState').textContent='';await checkStorage()}catch(error){byId('settingsState').textContent=error.message}
+ try{const data=await api('/api/preferences');if(document.activeElement!==byId('downloadDir'))byId('downloadDir').value=data.downloadDir;showMapping(data.mapping);updatePlatformStatus(data.tokens);byId('settingsState').textContent='';await checkStorage()}catch(error){byId('settingsState').textContent=error.message}
 }
 async function savePreferences(){
  byId('savePreferencesButton').disabled=true;byId('settingsState').textContent='正在保存…';const tokens={};Object.keys(platforms).forEach(k=>{if(byId('clear-'+k).checked)tokens[k]='';else if(byId('token-'+k).value.trim())tokens[k]=byId('token-'+k).value.trim()});

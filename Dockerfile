@@ -2,7 +2,7 @@ FROM python:3.12-slim
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
-COPY app.py engine_client.py gateway.py auth.py hub_features.py storage.py download_queue.py ./
+COPY app.py engine_client.py gateway.py auth.py hub_features.py storage.py download_queue.py search_providers.py qr_login.py ./
 COPY scripts ./scripts
 COPY templates ./templates
 COPY static ./static

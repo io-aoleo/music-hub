@@ -11,6 +11,8 @@ engine 的 9981 仅在 Compose 内部网络可见，Python 使用服务名 engin
 
 ## 请求流
 
+分页搜索由 search_providers.py 适配五个平台的页码和条数，传递平台 Cookie 并保留下载所需标识；qr_login.py 为网易云扫码提供会话绑定、有效期、限速和安全状态接口，确认后由引擎保存 Cookie。
+
 浏览器访问 / 时展示统一音乐界面；/api/* 由 Python 处理。首次访问进入 /setup 创建管理员，已有账号使用 /login。
 浏览器访问 /music/* 时，Python 转发至 Go 并流式返回响应，保留 Range、多个 Set-Cookie 和音频响应头。
 网页使用签名会话 Cookie 和 CSRF Token；密码仅以哈希形式保存在任务卷。HTTP Basic 仅保留给 CLI 兼容使用，不弹出浏览器原生登录框。

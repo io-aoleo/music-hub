@@ -1,20 +1,13 @@
 """Native search, shared storage, settings and persistent batch downloads."""
 import os, threading
-from html.parser import HTMLParser
 from pathlib import Path
 import requests
 from flask import jsonify, request
 from download_queue import DownloadQueue,DownloadFailure
 from storage import MusicStorage
+from search_providers import ProviderSearch, SearchUnavailable
+from qr_login import register_qr_login
 
-class SearchParser(HTMLParser):
-    def __init__(self):
-        super().__init__(); self.songs=[]
-    def handle_starttag(self, tag, attrs):
-        attributes=dict(attrs)
-        if tag=='li' and 'song-card' in attributes.get('class','').split():
-            song={key:attributes.get('data-'+key,'') for key in ('id','source','name','artist','album','cover','duration','extra')}
-            if song['id'] and song['source']: self.songs.append(song)
 
 def register_features(app,engine):
     config_lock=threading.RLock(); storage=MusicStorage()
@@ -22,7 +15,8 @@ def register_features(app,engine):
     def call(path,method='GET',**kwargs):
         with requests.Session() as client:
             client.trust_env=False
-            response=client.request(method,engine.base_url+'/music/'+path,headers=engine.headers(),timeout=(5,150),**kwargs)
+            timeout=kwargs.pop('timeout',(5,150))
+            response=client.request(method,engine.base_url+'/music/'+path,headers=engine.headers(),timeout=timeout,**kwargs)
             response.raise_for_status()
             return response
     def current_path(settings):
@@ -49,14 +43,20 @@ def register_features(app,engine):
     @app.errorhandler(requests.RequestException)
     def upstream_error(error):
         return jsonify(ok=False,msg='音乐服务暂时不可用，请稍后重试'),502
+    provider=ProviderSearch(lambda:call('cookies',timeout=(5,10)).json())
+    app.extensions['provider_search']=provider
+    register_qr_login(app,call,engine,config_lock)
     @app.get('/api/search')
     def search():
         query=request.args.get('q','').strip();source=request.args.get('source','netease')
         if not query or len(query)>300: return jsonify(ok=False,msg='请输入 1～300 字的歌曲或歌手名称'),400
         if source not in ('netease','qq','kuwo','kugou','migu'): return jsonify(ok=False,msg='音乐来源无效'),400
-        response=call('search',params={'q':query,'sources':source,'type':'song'})
-        parser=SearchParser();parser.feed(response.text)
-        return jsonify(ok=True,songs=parser.songs)
+        try:
+            page=int(request.args.get('page','1'));size=int(request.args.get('page_size','20'))
+            if not 1<=page<=1000 or not 1<=size<=50:raise ValueError()
+        except ValueError:return jsonify(ok=False,msg='页码须为 1～1000，每页数量须为 1～50'),400
+        try:return jsonify(ok=True,**provider.search(query,source,page,size))
+        except SearchUnavailable as error:return jsonify(ok=False,msg=str(error)),502
     @app.route('/api/storage',methods=['GET','POST'])
     def storage_api():
         try:
