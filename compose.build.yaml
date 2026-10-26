@@ -1,0 +1,7 @@
+services:
+  hub:
+    image: music-hub:local
+    build:
+      context: .
+      args:
+        GOPROXY: ${ENGINE_GOPROXY:-https://proxy.golang.org,direct}

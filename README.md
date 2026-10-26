@@ -2,7 +2,7 @@
 
 在自己的 NAS 上搜索音乐、批量下载、按计划补充曲库。一个入口管理账号、音乐目录、平台登录和下载任务。
 
-Music Hub 提供统一的红白音乐界面，使用 Go Music DL 处理音频下载。只需一份 Docker Compose，下载引擎无需单独映射端口。
+Music Hub 提供统一的红白音乐界面，使用 Go Music DL 处理音频下载。使用单一 Docker 镜像：界面、下载引擎、首次初始化都在一个容器内，下载引擎只监听容器内回环地址。
 
 ![Music Hub 首次设置界面](docs/images/setup.png)
 
@@ -22,12 +22,13 @@ Music Hub 提供统一的红白音乐界面，使用 Go Music DL 处理音频下
 需要 Docker Engine 和 Docker Compose v2。宿主机无需安装 Python、Go 或 Node.js。
 
 ```sh
-git clone https://github.com/io-aoleo/music-hub.git
-cd music-hub
-docker compose up -d --build
+mkdir -p music-hub && cd music-hub
+curl -fsSLo compose.yaml https://raw.githubusercontent.com/io-aoleo/music-hub/main/compose.yaml
+# 可选：先在 .env 写入 ENGINE_DOWNLOAD_PATH=/你的/NAS/音乐目录
+docker compose up -d
 ```
 
-首次构建需要联网下载基础镜像和依赖。启动后打开：
+直接拉取预构建镜像 `ghcr.io/io-aoleo/music-hub:latest`，支持 Linux AMD64 和 ARM64，宿主机无需编译。启动后打开：
 
 ```text
 http://你的设备地址:9985
@@ -48,7 +49,7 @@ http://你的设备地址:9985
 docker compose ps -a
 ```
 
-正常情况下 `init` 以退出码 0 结束，`hub` 和 `engine` 显示 healthy。日常只访问 9985，9981 是容器内部端口。
+正常情况下只有一个 `music-hub-hub-1` 容器，状态为 healthy。初始化在启动时完成，界面与引擎都以 UID 1000 运行；引擎只监听 `127.0.0.1:9981`，日常只访问 9985。
 
 ## NAS 目录映射
 
@@ -63,7 +64,7 @@ HUB_PORT=9985
 然后运行或重新创建容器：
 
 ```sh
-docker compose up -d --build
+docker compose up -d
 ```
 
 这个例子的映射是：
@@ -77,7 +78,7 @@ docker compose up -d --build
 
 网页「路径与 Token」显示当前配置的映射，支持浏览、创建和选择 `/music` 内的子目录。网页下载路径填写容器路径，例如 `/music/华语`，不要填写 `/vol1/...`。
 
-两个长期服务都使用 **UID 1000**。已有 NAS 目录需要允许这个用户读取、创建和写入文件，且不能只读挂载。系统会实际测试写入，并拒绝越界路径和指向挂载外的符号链接；初始化时不会递归修改已有曲库权限。
+容器中的界面和引擎进程都使用 **UID 1000**。已有 NAS 目录需要允许这个用户读取、创建和写入文件，且不能只读挂载。系统会实际测试写入，并拒绝越界路径和指向挂载外的符号链接；初始化时不会递归修改已有曲库权限。
 
 修改 `.env` 的挂载后需重新创建容器，单独执行 `docker compose restart` 不会更新挂载。
 
@@ -137,9 +138,11 @@ docker compose up -d --build
 升级前备份 `.env`、任务数据卷、引擎数据卷，并保留音乐目录。
 
 ```sh
-git pull --ff-only
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 ```
+
+从双容器版升级时，先备份并保留原 Compose 和 `.env`，下载新版 `compose.yaml` 后，使用原项目名称执行 `docker compose up -d --remove-orphans`。这会移除旧 `engine` / `init` 容器，保留数据卷；引擎数据卷改挂载到同一容器的 `/data/engine`。首次启动后检查账号、平台登录和下载目录。升级时请等待正在下载的任务结束。旧编排备份见 [compose.legacy.yaml](compose.legacy.yaml)，仅用于回退。
 
 **旧版升级不要覆盖自己的 `.env`。** 保留原 `HUB_TASKS_PATH`、`ENGINE_DATA_PATH` 和 `ENGINE_DOWNLOAD_PATH`，避免误切换到新的空数据卷。
 
@@ -158,7 +161,8 @@ docker compose up -d --build
 - `ENGINE_DOWNLOAD_PATH`：宿主机音乐目录，默认 `./data/music`。
 - `HUB_TASKS_PATH`、`ENGINE_DATA_PATH`：任务和引擎数据位置，默认命名卷；升级保留已有值。
 - `HUB_COOKIE_SECURE`：仅通过 HTTPS 访问时可设为 `true`，默认 `false`。
-- `ENGINE_GOPROXY`、`ENGINE_APK_MIRROR`：构建依赖镜像源，可按实际网络修改。
+- `MUSIC_HUB_IMAGE`：镜像完整名称，可固定为已发布的版本标签。
+- `ENGINE_GOPROXY`：仅源码构建时使用的 Go 依赖代理。
 
 外网访问通过自己的反向代理提供 HTTPS，保持默认鉴权开启。管理员密码仅保存哈希；平台 Cookie 保存在引擎数据卷，内部服务令牌保存在共享配置卷，不传给浏览器。
 
@@ -193,8 +197,28 @@ docker compose exec hub python scripts/reset_password.py
 **查看日志**
 
 ```sh
-docker compose logs --tail=100 hub engine
+docker compose logs --tail=100 hub
 ```
+
+## 飞牛 Docker 界面部署
+
+1. 在飞牛文件管理中创建 Music Hub 项目目录，下载本仓库的 `compose.yaml`。
+2. 在同目录创建 `.env`，设置 `ENGINE_DOWNLOAD_PATH=/vol1/你的用户目录/music`；这是你自己的宿主机目录。
+3. 打开 Docker → Compose，创建项目并选择该文件，启动项目。
+4. 浏览器打开 `http://飞牛地址:9985`，创建管理员并检查音乐目录写入权限。
+5. 进入「路径与 Token」，扫码或填写平台凭据后搜索下载。
+
+只需导入 Compose，不需要单独安装下载引擎，也不需要 Docker Socket 或 privileged 权限。GHCR 拉取失败时检查设备到 `ghcr.io` 的网络连接。
+
+## 源码构建
+
+```sh
+git clone https://github.com/io-aoleo/music-hub.git
+cd music-hub
+docker compose -f compose.yaml -f compose.build.yaml up -d --build
+```
+
+GitHub Actions 会在 main 更新或推送版本标签时构建 AMD64/ARM64 镜像；只有检查通过才发布。普通 PR 只验证构建，不发布镜像。
 
 ## 开发与验证
 

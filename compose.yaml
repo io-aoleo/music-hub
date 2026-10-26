@@ -1,78 +1,24 @@
 name: music-hub
-x-hub-image: &hub-image
-  image: music-hub-hub:local
-  build: .
 services:
-  init:
-    <<: *hub-image
-    user: "0:0"
-    restart: "no"
-    command: ["python", "scripts/bootstrap.py"]
+  hub:
+    image: ${MUSIC_HUB_IMAGE:-ghcr.io/io-aoleo/music-hub:latest}
+    restart: unless-stopped
+    stop_grace_period: 35s
+    ports:
+      - "${HUB_BIND_ADDRESS:-0.0.0.0}:${HUB_PORT:-9985}:8000"
     environment:
+      HUB_AUTH_REQUIRED: ${HUB_AUTH_REQUIRED:-true}
+      HUB_COOKIE_SECURE: ${HUB_COOKIE_SECURE:-false}
+      HUB_USER: ${HUB_USER:-admin}
+      HUB_PASSWORD: ${HUB_PASSWORD:-}
       HUB_ENGINE_TOKEN: ${HUB_ENGINE_TOKEN:-}
+      HUB_MUSIC_HOST_PATH: ${ENGINE_DOWNLOAD_PATH:-./data/music}
+      TZ: Asia/Shanghai
     volumes:
       - ${HUB_TASKS_PATH:-hub_tasks}:/data/tasks
       - ${ENGINE_DATA_PATH:-engine_data}:/data/engine
       - ${ENGINE_DOWNLOAD_PATH:-./data/music}:/music
       - hub_config:/shared
-  hub:
-    <<: *hub-image
-    restart: unless-stopped
-    ports:
-      - "${HUB_BIND_ADDRESS:-0.0.0.0}:${HUB_PORT:-9985}:8000"
-    environment:
-      HUB_DATA_DIR: /data/tasks
-      HUB_ENGINE_URL: http://engine:9981
-      HUB_ENGINE_TOKEN_FILE: /shared/engine-token
-      HUB_AUTH_REQUIRED: ${HUB_AUTH_REQUIRED:-true}
-      HUB_COOKIE_SECURE: ${HUB_COOKIE_SECURE:-false}
-      HUB_USER: ${HUB_USER:-admin}
-      HUB_PASSWORD: ${HUB_PASSWORD:-}
-      HUB_MUSIC_HOST_PATH: ${ENGINE_DOWNLOAD_PATH:-./data/music}
-      TZ: Asia/Shanghai
-    volumes:
-      - ${HUB_TASKS_PATH:-hub_tasks}:/data/tasks
-      - ${ENGINE_DOWNLOAD_PATH:-./data/music}:/music
-      - hub_config:/shared:ro
-    depends_on:
-      init:
-        condition: service_completed_successfully
-      engine:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD","python","-c","import urllib.request;urllib.request.urlopen('http://127.0.0.1:8000/healthz',timeout=5)"]
-      interval: 30s
-      timeout: 8s
-      start_period: 30s
-      retries: 3
-  engine:
-    image: music-hub-engine:local
-    build:
-      context: ./vendor/go-music-dl
-      dockerfile: Dockerfile.hub
-      args:
-        GOPROXY: ${ENGINE_GOPROXY:-https://proxy.golang.org,direct}
-        APK_MIRROR: ${ENGINE_APK_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}
-    restart: unless-stopped
-    environment:
-      ENGINE_INTERNAL_TOKEN_FILE: /shared/engine-token
-      MUSIC_DL_CONFIG_DB: /home/appuser/data/settings.db
-      MUSIC_DL_FAVORITES_DB: /home/appuser/data/favorites.db
-      TZ: Asia/Shanghai
-    volumes:
-      - ${ENGINE_DATA_PATH:-engine_data}:/home/appuser/data
-      - ${ENGINE_DOWNLOAD_PATH:-./data/music}:/music
-      - hub_config:/shared:ro
-    depends_on:
-      init:
-        condition: service_completed_successfully
-    expose: ["9981"]
-    healthcheck:
-      test: ["CMD","wget","-q","-O","/dev/null","http://127.0.0.1:9981/music/healthz"]
-      interval: 15s
-      timeout: 5s
-      start_period: 30s
-      retries: 4
 volumes:
   hub_tasks:
   engine_data:
