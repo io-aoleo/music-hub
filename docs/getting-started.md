@@ -1,3 +1,21 @@
+# 单容器版安装与旧版迁移
+
+当前发布版将界面、Go 下载引擎、初始化整合到同一个镜像中。新安装请按 [README](../README.md#快速开始) 拉取镜像部署。
+
+## 从双容器版升级
+
+1. 等待下载结束，备份原 Compose、.env、hub_tasks、engine_data、hub_config 数据卷和音乐目录。
+2. 下载新 compose.yaml，保留原项目名及 .env 中的 HUB_TASKS_PATH、ENGINE_DATA_PATH、ENGINE_DOWNLOAD_PATH。
+3. 执行 `docker compose pull`，再执行 `docker compose up -d --remove-orphans`。
+4. 原 engine / init 容器移除，数据卷保留；engine_data 在新容器内挂载到 /data/engine。
+5. 检查管理员、历史任务、Cookie、音乐目录。网页入口和端口不变。
+
+回退时恢复备份的 Compose 和旧镜像；compose.legacy.yaml / Dockerfile.hub 保留了双容器构建方式。不要执行 down -v。
+
+下面是更早版本迁移参考，其中 init / engine 等独立服务命令只适用于旧编排。
+
+---
+
 # 从零启动与升级
 
 ## 首次启动
