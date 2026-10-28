@@ -1,0 +1,46 @@
+name: Mirror released image to Docker Hub
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Existing GHCR tag to copy without rebuilding'
+        required: true
+        default: '1.0.0'
+permissions:
+  contents: read
+concurrency:
+  group: dockerhub-mirror-${{ inputs.tag }}
+  cancel-in-progress: false
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate configuration and tag
+        env:
+          IMAGE: ${{ vars.DOCKERHUB_IMAGE }}
+          USERNAME: ${{ vars.DOCKERHUB_USERNAME }}
+          TOKEN: ${{ secrets.DOCKERHUB_TOKEN }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          test -n "$IMAGE" && test -n "$USERNAME" && test -n "$TOKEN"
+          [[ "$TAG" =~ ^[a-zA-Z0-9_][a-zA-Z0-9_.-]{0,127}$ ]]
+      - name: Install registry copy tool
+        run: sudo apt-get update && sudo apt-get install -y skopeo
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ vars.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - name: Copy all architectures and verify digest
+        env:
+          SOURCE: ghcr.io/${{ github.repository }}
+          DESTINATION: docker.io/${{ vars.DOCKERHUB_IMAGE }}
+          TAG: ${{ inputs.tag }}
+        run: |
+          set -euo pipefail
+          skopeo copy --all --preserve-digests --authfile "$HOME/.docker/config.json" \
+            "docker://$SOURCE:$TAG" "docker://$DESTINATION:$TAG"
+          source_digest=$(skopeo inspect --raw "docker://$SOURCE:$TAG" | sha256sum | cut -d ' ' -f 1)
+          public_digest=$(skopeo inspect --raw --no-creds "docker://$DESTINATION:$TAG" | sha256sum | cut -d ' ' -f 1)
+          test "$source_digest" = "$public_digest"
+          echo "Verified public mirror: $DESTINATION:$TAG @ sha256:$public_digest" >> "$GITHUB_STEP_SUMMARY"
