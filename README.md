@@ -28,7 +28,9 @@ curl -fsSLo compose.yaml https://raw.githubusercontent.com/io-aoleo/music-hub/ma
 docker compose up -d
 ```
 
-直接拉取预构建镜像 `ghcr.io/io-aoleo/music-hub:latest`，支持 Linux AMD64 和 ARM64，宿主机无需编译。启动后打开：
+默认从 [Docker Hub](https://hub.docker.com/r/ioaoleo/music-hub) 拉取预构建镜像 `ioaoleo/music-hub:latest`，支持 Linux AMD64 和 ARM64，宿主机无需编译。也可使用 [GHCR](https://github.com/io-aoleo/music-hub/pkgs/container/music-hub) 的 `ghcr.io/io-aoleo/music-hub:latest`。两个仓库的用户名不同，请按完整地址填写。
+
+想固定稳定版本，在 `.env` 设置 `MUSIC_HUB_IMAGE=ioaoleo/music-hub:1.0.0`。`latest` 会随默认分支更新；版本标签用于固定版本。启动后打开：
 
 ```text
 http://你的设备地址:9985
@@ -208,7 +210,9 @@ docker compose logs --tail=100 hub
 4. 浏览器打开 `http://飞牛地址:9985`，创建管理员并检查音乐目录写入权限。
 5. 进入「路径与 Token」，扫码或填写平台凭据后搜索下载。
 
-只需导入 Compose，不需要单独安装下载引擎，也不需要 Docker Socket 或 privileged 权限。GHCR 拉取失败时检查设备到 `ghcr.io` 的网络连接。
+只需导入 Compose，不需要单独安装下载引擎，也不需要 Docker Socket 或 privileged 权限。Docker Hub 拉取失败时，可在 `.env` 设置 `MUSIC_HUB_IMAGE=ghcr.io/io-aoleo/music-hub:latest` 后重新执行 `docker compose pull` 和 `docker compose up -d`；固定版本用户替换为对应版本标签。公开镜像无需登录仓库，匿名拉取仍受平台速率限制和设备网络影响。
+
+已有实例只切换镜像仓库时，保留原项目名称、端口、数据卷和目录映射，仅修改 `MUSIC_HUB_IMAGE`。下载包的镜像名可能不同，离线导入请使用发布页对应说明。
 
 ## 源码构建
 
@@ -218,7 +222,7 @@ cd music-hub
 docker compose -f compose.yaml -f compose.build.yaml up -d --build
 ```
 
-GitHub Actions 会在 main 更新或推送版本标签时构建 AMD64/ARM64 镜像；只有检查通过才发布。普通 PR 只验证构建，不发布镜像。
+GitHub Actions 会在 main 更新或推送版本标签时构建 AMD64/ARM64 镜像；只有检查通过才发布到 GHCR，并按仓库配置同步到 Docker Hub。普通 PR 只验证构建，不发布镜像。维护者配置和已有版本同步方法见 [镜像发布说明](docs/image-publishing.md)。
 
 ## 开发与验证
 

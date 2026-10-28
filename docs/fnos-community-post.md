@@ -6,7 +6,8 @@
 
 - **源码仓库**：[io-aoleo/music-hub](https://github.com/io-aoleo/music-hub)
 - **版本与离线包**：[v1.0.0 发布页](https://github.com/io-aoleo/music-hub/releases/tag/v1.0.0)
-- **镜像**：`ghcr.io/io-aoleo/music-hub:1.0.0`
+- **Docker Hub 镜像**：[ioaoleo/music-hub](https://hub.docker.com/r/ioaoleo/music-hub)，安装时使用 `ioaoleo/music-hub:1.0.0`
+- **备用 GHCR 镜像**：`ghcr.io/io-aoleo/music-hub:1.0.0`
 - **架构**：Linux AMD64 / ARM64
 
 > 以下使用实际界面配图：搜索来自平台实时结果，任务截图使用飞牛上真实历史记录的只读展示副本。首次设置与二维码由独立环境展示，不包含真实密码、Cookie、Token；截图中的二维码不能用于登录，请在自己的实例中重新生成。
@@ -32,7 +33,7 @@
 ```dotenv
 ENGINE_DOWNLOAD_PATH=/vol1/1000/music
 HUB_PORT=9985
-MUSIC_HUB_IMAGE=ghcr.io/io-aoleo/music-hub:1.0.0
+MUSIC_HUB_IMAGE=ioaoleo/music-hub:1.0.0
 ```
 
 `/vol1/1000/music` 只是示例，按自己的存储卷、用户目录修改。音乐目录需要允许 UID 1000 读取、创建和写入文件。
@@ -47,7 +48,9 @@ MUSIC_HUB_IMAGE=ghcr.io/io-aoleo/music-hub:1.0.0
 docker compose up -d
 ```
 
-这是拉取预构建镜像，不需要在 NAS 上安装 Python、Go 或现场编译源码。正常运行时只有一个 `music-hub-hub-1` 容器；引擎在容器内部运行，不需要单独开放端口，也不需要挂载 Docker Socket 或开启 privileged。
+这是从 Docker Hub 拉取预构建镜像，不需要在 NAS 上安装 Python、Go 或现场编译源码。正常运行时只有一个 `music-hub-hub-1` 容器；引擎在容器内部运行，不需要单独开放端口，也不需要挂载 Docker Socket 或开启 privileged。
+
+Docker Hub 用户名是 `ioaoleo`，GHCR 用户名是 `io-aoleo`，请勿混写。两个仓库均公开，支持 AMD64 / ARM64，无需登录即可拉取，实际速度取决于设备网络。如果 Docker Hub 不通，可把 `.env` 中的镜像改成 `ghcr.io/io-aoleo/music-hub:1.0.0` 再启动。已有实例切换仓库时，保留原 Compose 项目名和所有数据映射，只修改 `MUSIC_HUB_IMAGE` 后执行 `docker compose pull`、`docker compose up -d`。
 
 ### 3. 打开网页，创建自己的管理员
 
@@ -150,7 +153,7 @@ sha256sum -c SHA256SUMS
 docker load -i music-hub-1.0.0-amd64.tar.gz
 ```
 
-确认 `.env` 中固定 `MUSIC_HUB_IMAGE=ghcr.io/io-aoleo/music-hub:1.0.0`，再启动：
+离线包内的镜像名为 `ghcr.io/io-aoleo/music-hub:1.0.0`；离线导入后确认 `.env` 中固定 `MUSIC_HUB_IMAGE=ghcr.io/io-aoleo/music-hub:1.0.0`，再启动：
 
 ```sh
 docker compose up -d --pull never

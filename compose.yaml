@@ -1,7 +1,7 @@
 name: music-hub
 services:
   hub:
-    image: ${MUSIC_HUB_IMAGE:-ghcr.io/io-aoleo/music-hub:latest}
+    image: ${MUSIC_HUB_IMAGE:-ioaoleo/music-hub:latest}
     restart: unless-stopped
     stop_grace_period: 35s
     ports:

@@ -8,7 +8,9 @@ GitHub Actions 的 `Docker image` 流程先运行测试、Compose 配置检查�
 
 ## Docker Hub 同步发布
 
-先在自己的 Docker Hub 命名空间创建公开的 `music-hub` 仓库，再在 GitHub 仓库 **Settings → Secrets and variables → Actions** 配置：
+本项目公开镜像为 [ioaoleo/music-hub](https://hub.docker.com/r/ioaoleo/music-hub)。Docker Hub 用户名 `ioaoleo` 与 GitHub 的 `io-aoleo` 不同。
+
+维护自己的分支时，先在自己的 Docker Hub 命名空间创建公开的 `music-hub` 仓库，再在 GitHub 仓库 **Settings → Secrets and variables → Actions** 配置：
 
 - Repository variable `DOCKERHUB_USERNAME`：有权推送该仓库的 Docker Hub 用户名。
 - Repository variable `DOCKERHUB_IMAGE`：完整镜像名称，例如 `你的用户名/music-hub`，不含标签。
@@ -19,5 +21,9 @@ GitHub Actions 的 `Docker image` 流程先运行测试、Compose 配置检查�
 配置好后手动运行 `Docker image` 工作流可发布当前默认分支。默认分支发布 `latest` 和提交标签；推送 `v1.0.0` 这样的版本标签会发布 `1.0.0`。不要为重新发布而移动已有版本标签。
 
 对已有版本，保留原有多架构索引、各架构清单和镜像层进行仓库间复制，不要用当前分支重新构建并冒充旧版本。复制后检查标签与 AMD64 / ARM64 架构，并在未登录状态下验证可读取镜像清单，再更新面向用户的部署文档。
+
+可手动运行 `Mirror released image to Docker Hub` 工作流，填写已有 GHCR 标签（如 `1.0.0`）。流程复制全部架构、保留摘要，并在匿名读取目标后比对索引摘要。使用者也可在 Docker Hub 的 Tags 页查看架构。
+
+发布令牌到期前需由维护者更新 GitHub 的 `DOCKERHUB_TOKEN`；令牌过期只影响后续发布，已公开镜像的拉取和已运行实例不受影响。
 
 发布令牌只用于上传，不会作为 Docker 构建参数或镜像内容。运行时账号、音乐平台凭据、任务数据库和下载文件来自各自设备的数据挂载，不随公共镜像发布。
